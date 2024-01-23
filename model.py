@@ -217,9 +217,10 @@ class baseline(nn.Module):
             nn.Linear(1024, 512),
             nn.BatchNorm1d(512),
             nn.ReLU(),
-            # nn.Linear(512, 1)
-            nn.Linear(512, 230)
         )
+
+        self.classifier = nn.Linear(512, 230, bias=False)
+        self.to_latent = nn.Linear(512, 512, bias=False)
 
     def forward(self, x, gender):
         x = self.backbone(x)
@@ -229,23 +230,8 @@ class baseline(nn.Module):
 
         gender_encode = self.gender_encoder(gender)
 
-        return self.MLP(torch.cat((x, gender_encode), dim=-1))
-
-    def manifold_output(self, x, gender):
-        x = self.backbone(x)
-        x = F.adaptive_avg_pool2d(x, 1)
-        x = torch.squeeze(x)
-        x = x.view(-1, self.out_channels)
-
-        gender_encode = self.gender_encoder(gender)
-        x = torch.cat((x, gender_encode), dim=-1)
-        for i in range(len(self.MLP)):
-            x = self.MLP[i](x)
-            if i == 5:
-                ReLU_out = x
-
-        return ReLU_out
-
+        features = self.MLP(torch.cat((x, gender_encode), dim=-1))
+        return self.to_latent(features), self.classifier(features)
 
 class Res50Align(nn.Module):
 

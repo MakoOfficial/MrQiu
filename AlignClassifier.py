@@ -133,8 +133,8 @@ def L1_penalty(net, alpha):
     loss = 0
     for param in net.MLP.parameters():
         loss += torch.sum(torch.abs(param))
-    # for param2 in net.classifer.parameters():
-    #     loss += torch.sum(torch.abs(param2))
+    for param2 in net.classifer.parameters():
+        loss += torch.sum(torch.abs(param2))
 
     return alpha * loss
 
@@ -162,8 +162,8 @@ def train_fn(net, train_loader, reverse_loader, loss_fn, loss_MSE, optimizer):
         optimizer.zero_grad()
         image, gender = data[0]
         reverse_image, reverse_gender = reverse_data[0]
-        label = data[1]
-        reverse_label = reverse_data[1]
+        label = data[1] - 1
+        reverse_label = reverse_data[1] - 1
 
         input_img = torch.cat((image.data, reverse_image.data), dim=0)
         input_gender = torch.cat((gender.data, reverse_gender.data), dim=0)
@@ -181,10 +181,10 @@ def train_fn(net, train_loader, reverse_loader, loss_fn, loss_MSE, optimizer):
         batch_similarity = cos_similarity(logits) # BxB
         target = get_align_target(input_label, input_gender)
 
-        loss1 = 2 * loss_MSE(batch_similarity, target)
+        loss1 = loss_MSE(batch_similarity, target) / 2
         assert len(input_label.shape) == 1 and len(y_pred.shape) == 2
         loss2 = loss_fn(y_pred, input_label)
-        total_loss = loss1 + loss2
+        total_loss = loss1 + loss2 + L1_penalty(net, 1e-5)
 
         total_loss.backward()
         optimizer.step()
@@ -213,11 +213,11 @@ def evaluate_fn(net, val_loader):
 
             _, y_pred = net(image, gender)
             # y_pred = net(image, gender)
-            y_pred = torch.argmax(y_pred, dim=1)
+            y_pred = torch.argmax(y_pred, dim=1) + 1
 
             y_pred = y_pred.squeeze()
             label = label.squeeze()
-
+            assert len(y_pred.shape) == 1 and len(label.shape) == 1
             batch_loss = F.l1_loss(y_pred, label, reduction='sum').item()
             # print(batch_loss/len(data[1]))
             mae_loss += batch_loss
@@ -225,7 +225,7 @@ def evaluate_fn(net, val_loader):
 
 
 import time
-from model import Res50Align, get_My_resnet50
+from model import baseline, get_My_resnet50
 
 
 def map_fn(flags):
@@ -234,7 +234,7 @@ def map_fn(flags):
     # gpus = [0, 1]
     # torch.cuda.set_device('cuda:{}'.format(gpus[0]))
 
-    mymodel = Res50Align(32, *get_My_resnet50(pretrained=True)).cuda()
+    mymodel = baseline(32, *get_My_resnet50(pretrained=True)).cuda()
     #   mymodel.load_state_dict(torch.load('/content/drive/My Drive/BAA/resnet50_pr_2/best_resnet50_pr_2.bin'))
     # mymodel = nn.DataParallel(mymodel.cuda(), device_ids=gpus, output_device=gpus[0])
 
@@ -375,17 +375,17 @@ def shuffle_inputData(img, gender, label):
 
 if __name__ == "__main__":
     save_path = '../../autodl-tmp/AlignClassifier'
-    # os.makedirs(save_path, exist_ok=True)
+    os.makedirs(save_path, exist_ok=True)
 
     flags = {}
     flags['lr'] = 5e-4
-    flags['batch_size'] = 4
+    flags['batch_size'] = 16
     flags['num_workers'] = 4
     flags['num_epochs'] = 75
     flags['seed'] = 1
 
-    # data_dir = '../../autodl-tmp/archive'
-    data_dir = r'E:/code/archive/masked_1K_fold/fold_1'
+    data_dir = '../../autodl-tmp/archive'
+    # data_dir = r'E:/code/archive/masked_1K_fold/fold_1'
 
     train_csvOrder = pd.read_csv(os.path.join(data_dir, "trainOrder.csv"))
     train_csvReverse = pd.read_csv(os.path.join(data_dir, "trainReverse.csv"))

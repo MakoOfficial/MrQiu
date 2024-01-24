@@ -220,7 +220,6 @@ class baseline(nn.Module):
         )
 
         self.classifier = nn.Linear(512, 230, bias=False)
-        self.to_latent = nn.Linear(512, 512, bias=False)
 
     def forward(self, x, gender):
         x = self.backbone(x)
@@ -231,7 +230,7 @@ class baseline(nn.Module):
         gender_encode = self.gender_encoder(gender)
 
         features = self.MLP(torch.cat((x, gender_encode), dim=-1))
-        return self.to_latent(features), self.classifier(features)
+        return features, self.classifier(features)
 
 class Res50Align(nn.Module):
 
